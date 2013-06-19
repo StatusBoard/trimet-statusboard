@@ -1,0 +1,40 @@
+#trimetContainer {
+	background-color:  #07203a;
+	background-image: -webkit-gradient(linear, left top, left bottom, from(rgba(255,255,255,.1)), to(rgba(255,255,255,0))), url(bus.png);
+	background-repeat: no-repeat, no-repeat;
+	background-position: top left, center center;
+	
+	padding: 30px 20px 0px 60px;
+	width: 260px;
+	height: 370px;
+}
+
+.trimetLine {
+	float: left;
+	clear: both;
+	margin-bottom: 10px;
+}
+
+.trimetNumber {
+	background: #b12300;
+	width: 60px;
+	height: 50px;
+	padding-top: 10px;
+	-webkit-border-radius: 30px;
+	border: 0px solid;
+	text-align: center;
+	float: left;
+	clear: none;
+	font-size: 40px;
+}
+.trimetLine.alert .trimetNumber {
+	background: #ff5500;
+}
+.trimetTime {
+	width: 175px;
+	margin-left: 25px;
+	padding-top: 11px;
+	float: left;
+	clear: right;
+	font-size: 50px;
+}

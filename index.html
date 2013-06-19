@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <title>TriMet + Status Board</title>
+    
+    <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <link rel="stylesheet" type="text/css" href="styles/builder.css" />
+    <link rel="stylesheet" type="text/css" href="styles/animations.css" />
+    
+    <script type="text/javascript" src="scripts/statusbuilder.js"></script>
+    <script type="text/javascript" src="scripts/jquery.js"></script>
+    <script type="text/javascript" src="scripts/jquery.swap.js"></script>
+    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDcNh3wCYGVutb4apkXSszTm7OJ2YGFA4o&sensor=false"></script>
+    <script type="text/javascript">
+        var TRIMET_API_KEY = 'D4763B098987904E171CD5766';
+        var SOURCE_NAME = 'sayo.me';
+        
+        var routes = [];
+        
+        // Panel
+        function generateURL() {
+            var form = document.forms['builder'];
+            var url = 'http://sb.sayo.me/trimet/panel/';
+            
+            var params = {};
+            
+            var stopIDs = [];
+            var routeIDs = [];
+            
+            for (var i=0; i<routes.length; i++) {
+                var route = routes[i];
+                
+                var stopID = route.stopID;
+                stopIDs.push(stopID);
+                
+                var routeID = route.routeID;
+                routeIDs.push(routeID);
+            }
+            
+            params['stops'] = stopIDs.join(',');
+            params['routes'] = routeIDs.join(',');
+            
+            var size = form['size'];
+            for (var i=0; i<size.length; i++) {
+                if (size[i].checked) {
+                    params['size'] = size[i].value;
+                    break;
+                }
+            }
+            
+            var i = 0;
+            for (var key in params) {
+                var value = params[key];
+                if (i == 0) {
+                    url = url.concat('?');
+                }
+                else {
+                    url = url.concat('&');
+                }
+                pair = key + '=' + value;
+                url = url.concat(pair);
+                i++;
+            }
+            
+            return url;
+        }
+        
+        function generatePanel(animate) {
+            var url = generateURL();
+            var panicboardURL = StatusBuilder.getPanicboardURL(url, SOURCE_NAME);
+            
+            document.getElementById('panel_url').value = url;
+            
+            $('#preview').hide();
+            document.getElementById('preview').src = url;
+            if (animate) {
+                StatusBuilder.animate(document.getElementById('preview-container'), 'shake', 500);
+            }
+        }
+        
+        function openInStatusBoard() {
+            var url = generateURL();
+            var panicboardURL = StatusBuilder.getPanicboardURL(url, SOURCE_NAME);
+            
+            StatusBuilder.animate(document.getElementById('preview-container'), 'slide-out-top', 500, function() {
+                window.open(panicboardURL, "_self");
+                StatusBuilder.animate(document.getElementById('preview-container'), 'fade-in', 500);
+            });
+        }
+        
+        
+        // Routes
+        function addRoute(stop, route) {
+            var uuid = StatusBuilder.uuid();
+            
+            var routesList = $('#routes_list');
+            
+            var routeItem = $('<li id="route_' + uuid + '" />');
+            routeItem.append('<span class="route">' + $(route).attr('route') + '</span>');
+            routeItem.append('<span class="description">' + $(stop).attr('desc') + '</span>');
+            routeItem.append('<span class="direction">' + $(stop).attr('dir') + '</span>');
+            routeItem.append('<span class="stopid">' + $(route).attr('locid') + '</span>');
+            
+            var removeDiv = $('<div class="remove">x</div>');
+            removeDiv.click(function() {
+                removeRouteWithUUID(uuid);
+            });
+            routeItem.append(removeDiv);
+            
+            routesList.append(routeItem);
+            
+            var routeObject = {
+                uuid: uuid,
+                routeID: $(route).attr('route'),
+                stopID: $(route).attr('locid')
+            };
+            routes.push(routeObject);
+            
+            generatePanel(true);
+        }
+        
+        function removeRouteWithUUID(uuid) {
+            var idx = -1;
+            for (var i=0; i<routes.length; i++) {
+                var route = routes[i];
+                if (route.uuid == uuid) {
+                    idx = i;
+                    break;
+                }
+            }
+            
+            if (idx != -1) {
+                $('#route_' + uuid).remove();
+                routes.splice(idx, 1);
+                generatePanel(true);
+            }
+        }
+        
+        function loadRoutes() {
+            var routesList = $('#routes_list');
+            
+            var useDefault = true;
+            
+            if (useDefault) {
+                var uuid = StatusBuilder.uuid();
+                routes.push({uuid: uuid, stopID: 10791, routeID: 20});
+                
+                var routeItem = $('<li id="route_' + uuid + '" />');
+                routeItem.append('<span class="route">' + '20' + '</span>');
+                routeItem.append('<span class="description">' + 'W Burnside & NW 10th' + '</span>');
+                routeItem.append('<span class="direction">' + 'Westbound' + '</span>');
+                routeItem.append('<span class="stopid">' + '10791' + '</span>');
+                
+                console.log(uuid);
+                var removeDiv = $('<div class="remove">x</div>');
+                removeDiv.click(function() {
+                    removeRouteWithUUID(uuid);
+                });
+                routeItem.append(removeDiv);
+                
+                routesList.append(routeItem);
+            }
+        }
+        
+        function showAddRouteSheet() {
+            $('#sheet').show();
+            $('#add_route').show();
+            
+            StatusBuilder.animate(document.getElementById('sheet'), 'fade-in', 500);
+            StatusBuilder.animate(document.getElementById('add_route'), 'slide-in-top', 500, function() {
+                
+            });
+        }
+        
+        function closeAddRouteSheet() {
+            StatusBuilder.animate(document.getElementById('sheet'), 'fade-out', 500);
+            StatusBuilder.animate(document.getElementById('add_route'), 'slide-out-top', 500, function() {
+                $('#sheet').hide();
+                $('#add_route').hide();
+            });
+        }
+        
+        function cancelAddRouteSheet() {
+            closeAddRouteSheet();
+        }
+        
+        function getStopsNearAddress(address, func) {
+            var geocoder = new google.maps.Geocoder();
+            geocoder.geocode({'address': address}, function(results, status) {
+                if (status == 'OK') {
+                    var result = results[0];
+                    var latlng = result.geometry.location;
+                    $.get('http://developer.trimet.org/ws/V1/stops?ll=' + latlng.lng() + ',' + latlng.lat() + '&appID=' + TRIMET_API_KEY, function(data) {
+                        var results = $(data).children('resultSet').children('location');
+                        func(results, latlng, 'OK');
+                    }, "xml");
+                }
+                else {
+                    func(null, status);
+                }
+            });
+        }
+        
+        function getRoutesForStopWithID(stopID, func) {
+            $.get('http://developer.trimet.org/ws/V1/arrivals?locIDs=' + stopID + '&appID=' + TRIMET_API_KEY, function(data) {
+                var results = $(data).children('resultSet').children('arrival');
+                func(results, 'OK');
+            }, "xml");
+        }
+        
+        function getRoutesForStopWithID(stopID, func) {
+            $.get('http://developer.trimet.org/ws/V1/arrivals?locIDs=' + stopID + '&appID=' + TRIMET_API_KEY, function(data) {
+                var results = $(data).children('resultSet').children('arrival');
+                var location = $(data).children('resultSet').children('location');
+                
+                var nextArrivals = {};
+                results.each(function() {
+                    var route = $(this).attr('route');
+                    if (nextArrivals[route]) {
+                        return;
+                    }
+                    nextArrivals[route] = this;
+                });
+                var routes = [];
+                for (var arrivalID in nextArrivals) {
+                    var arrival = nextArrivals[arrivalID];
+                    routes.push(arrival);
+                }
+                
+                func(location, routes, 'OK');
+            }, "xml");
+        }
+        
+        var addRoutePreviousPage = null;
+        var addRouteSelectedStop = null;
+        var stopSearchMap = null;
+        var routeSearchMap = null;
+        
+        function searchRoutesByAddress() {
+            var value = document.getElementById('search_by_address').value;
+            
+            if (value && value.length > 0) {
+                getStopsNearAddress(value, function(stops, latlng, status) {
+                    $('#stop_search_results').children().remove();
+                    
+                    if (stops && stops.length > 0) {
+                        for (var i=0; i<stops.length; i++) {
+                            var stop = stops[i];
+                            (function (stop) {
+                                var locid = $(stop).attr('locid');
+                                var stopItem = $('<li />');
+                                stopItem.append('<span class="description">' + $(stop).attr('desc') + '</span>');
+                                stopItem.append('<span class="direction">' + $(stop).attr('dir') + '</span>');
+                                stopItem.append('<span class="stopid">' + $(stop).attr('locid') + '</span>');
+                                stopItem.click(function() {
+                                    addRoutePreviousPage = 'stop_search';
+                                    showRoutesForStopID(locid);
+                                });
+                                $('#stop_search_results').append(stopItem);
+                            })(stop);
+                        }
+                    }
+                    else {
+                        $('#stop_search_results').append('<p class="disabled">No matching stops found.</p>');
+                    }
+                    
+                    $('#add_route > .content').swap({target: 'stop_search'});
+                    
+                    if (latlng) {
+                        google.maps.event.trigger(stopSearchMap, 'resize');
+                        stopSearchMap.panTo(latlng);
+                    }
+                });
+            }
+            else {
+                StatusBuilder.animate(document.getElementById('search_by_address'), 'pulse', 500);
+            }
+        }
+        
+        function searchRoutesByStopID() {
+            var value = document.getElementById('search_by_stopid').value;
+            
+            if (value && value.length > 0) {
+                addRoutePreviousPage = 'location';
+                showRoutesForStopID(value);
+            }
+            else {
+                StatusBuilder.animate(document.getElementById('search_by_stopid'), 'pulse', 500);
+            }
+        }
+        
+        function showRoutesForStopID(stopID) {
+            addRouteSelectedStop = stopID;
+            getRoutesForStopWithID(stopID, function(stop, routes, status) {
+                $('#route_search_results').children().remove();
+                
+                if (routes && routes.length > 0) {
+                    for (var i=0; i<routes.length; i++) {
+                        var route = routes[i];
+                        (function (stop, route) {
+                            var routeid = $(route).attr('route');
+                            var routeItem = $('<li />');
+                            routeItem.append('<span class="description">' + $(route).attr('fullSign') + '</span>');
+                            routeItem.click(function() {
+                                addRoute(stop, route);
+                                closeAddRouteSheet();
+                            });
+                            $('#route_search_results').append(routeItem);
+                        })(stop, route);
+                    }
+                }
+                else {
+                    $('#route_search_results').append('<p class="disabled">No matching routes found.</p>');
+                }
+                
+                $('#add_route > .content').swap({target: 'route_search'});
+                
+                if (stop) {
+                    var lat = stop.attr('lat');
+                    var lng = stop.attr('lng');
+                    var latlng = new google.maps.LatLng(lat, lng);
+                    
+                    google.maps.event.trigger(routeSearchMap, 'resize');
+                    routeSearchMap.panTo(latlng);
+                }
+            });
+        }
+        
+        
+        // Ready
+        $(function() {
+            loadRoutes();
+            generatePanel(false);
+            
+            stopSearchMap = new google.maps.Map(document.getElementById("stop_search_map"), {
+                center: new google.maps.LatLng(-34.397, 150.644),
+                zoom: 16,
+                mapTypeId: google.maps.MapTypeId.ROADMAP,
+                streetViewControl: false,
+                mapTypeControl: false,
+            });
+            
+            routeSearchMap = new google.maps.Map(document.getElementById("route_search_map"), {
+                center: new google.maps.LatLng(-34.397, 150.644),
+                zoom: 16,
+                mapTypeId: google.maps.MapTypeId.ROADMAP,
+                streetViewControl: false,
+                mapTypeControl: false,
+            });
+        });
+    </script>
+</head>
+<body>
+    <header>TriMet + Status Board</header>
+    
+    <div class="container">
+        <div class="left">
+            <form name="builder">
+                <section>
+                    <header>Routes</header>
+                    <ul class="routes" id="routes_list"></ul>
+                    <input type="button" value="Add Route" onclick="showAddRouteSheet();" />
+                </section>
+                
+                <div class="separator"></div>
+                
+                <section class="inline">
+                    <header>Size</header>
+                    <input type="radio" id="id_regular" name="size" checked="checked" value="regular" onclick="generatePanel(true);" /><label for="id_regular">Regular</label></li>
+                    <input type="radio" id="id_small" name="size" value="small" onclick="generatePanel(true);" /><label for="id_small">Small</label></li>
+                </section>
+                
+                <div class="separator"></div>
+                
+                <section>
+                    <label for="panel_url">URL</label> <input type="text" id="panel_url" size="36" />
+                </section>
+                
+                <div class="separator"></div>
+                
+                <section style="text-align: center; ">
+                    <input type="button" id="button_statusboard" value="Open in Status Board" onclick="openInStatusBoard();" />
+                </section>
+            </form>
+        </div>
+        <div class="right">
+            <div id="preview-container">
+                <iframe id="preview" style="display: none;" onload="$(this).show();"></iframe>
+            </div>
+        </div>
+    </div>
+    
+    <div id="sheet" style="display: none;">
+        <div id="add_route" class="panel" style="display: none;">
+            <header>Add Route</header>
+            
+            <div class="content">
+                <div class="location">
+                    <div class="sides">
+                        <section class="left">
+                            <header>Location</header>
+                            <p>Enter an address or intersection</p>
+                            <textarea id="search_by_address" cols="25"></textarea><br />
+                            <input type="button" value="Search" onclick="searchRoutesByAddress();" id="button_search_by_address" />
+                        </section>
+                        <section class="right">
+                            <header>Stop</header>
+                            <p>Enter the ID number of the stop</p>
+                            <input type="text" id="search_by_stopid" size="5" />
+                            <input type="button" value="Search" onclick="searchRoutesByStopID();" id="button_search_by_stop_id" />
+                        </section>
+                    </div>
+                </div>
+                <div class="stop_search" style="display: none;">
+                    <input type="button" value="Back" onclick="$('#add_route > .content').swap({target: 'location', direction: 'right'});" />
+                    <h2>Select the stop for your route.</h2>
+                    <div class="separator"></div>
+                    <div class="map-container">
+                        <div id="stop_search_map" class="map"></div>
+                    </div>
+                    <div class="separator"></div>
+                    <ul id="stop_search_results" class="results"></ul>
+                </div>
+                <div class="route_search" style="display: none;">
+                    <input type="button" value="Back" onclick="$('#add_route > .content').swap({target: addRoutePreviousPage, direction: 'right'});" />
+                    <h2>Select your route.</h2>
+                    <div class="separator"></div>
+                    <div class="map-container">
+                        <div id="route_search_map" class="map"></div>
+                    </div>
+                    <div class="separator"></div>
+                    <ul id="route_search_results" class="results"></ul>
+                </div>
+            </div>
+            
+            <div class="separator dark"></div>
+            
+            <footer>
+                <input type="button" value="Cancel" onclick="cancelAddRouteSheet();" />
+            </footer>
+        </div>
+    </div>
+    
+    <footer>
+        <p>An experiment by <a href="http://twitter.com/logancollins">@logancollins</a> and <a href="http://twitter.com/sayo">@sayo</a>.</p>
+        <p>Status Board is a service mark of Panic Inc. The TriMet logo is a trademark of TriMet.</p>
+    </footer>
+    
+    <!-- GoSquared -->
+    <script type="text/javascript">
+	  var GoSquared = {};
+	  GoSquared.acct = "GSN-526431-G";
+	  (function(w){
+	    function gs(){
+	      w._gstc_lt = +new Date;
+	      var d = document, g = d.createElement("script");
+	      g.type = "text/javascript";
+	      g.src = "//d1l6p2sc9645hc.cloudfront.net/tracker.js";
+	      var s = d.getElementsByTagName("script")[0];
+	      s.parentNode.insertBefore(g, s);
+	    }
+	    w.addEventListener ?
+	      w.addEventListener("load", gs, false) :
+	      w.attachEvent("onload", gs);
+	  })(window);
+	</script>
+</body>
+</html>

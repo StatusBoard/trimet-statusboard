@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <title>TriMet</title>
+    
+    <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    
+    <link rel="stylesheet" type="text/css" href="../styles/panel.css" />
+    
+    <script type="text/javascript" src="../scripts/jquery.js"></script>
+    <script type="text/javascript" src="../scripts/jquery.timeago.js"></script>
+    <script type="text/javascript" src="../scripts/statusbuilder.js"></script>
+    <script type="text/javascript">
+        var TRIMET_API_KEY = 'D4763B098987904E171CD5766';
+        
+        $.timeago.settings.allowFuture = true;
+        $.timeago.settings.strings = {
+            prefixAgo: null,
+            prefixFromNow: null,
+            suffixAgo: "ago",
+            suffixFromNow: null,
+            seconds: "< 1 min",
+            minute: "1 min",
+            minutes: "%d min",
+            hour: "1 hour",
+            hours: "%d hours",
+            day: "1 day",
+            days: "%d days",
+            month: "1 month",
+            months: "%d months",
+            year: "1 year",
+            years: "%d years",
+            wordSeparator: " ",
+            numbers: []
+          }
+        
+        var stopIDs = null;
+        var stopObjects = [];
+        var stopObjectsByKey = {};
+        var locationObjects = {};
+        
+        function update() {
+            $.get('http://developer.trimet.org/ws/V1/arrivals?locIDs=' + stopIDs + '&appID=' + TRIMET_API_KEY, function(data) {
+                var resultSet = $(data).children('resultSet');
+                
+                for (var i=0; i<stopObjects.length; i++) {
+                    var stop = stopObjects[i];
+                    stop.arrivals = [];
+                }
+                
+                // Locations
+                resultSet.children('location').each(function() {
+                    var location = $(this);
+                    var locid = location.attr('locid');
+                    locationObjects[locid] = location;
+                });
+                
+                // Arrivals
+                resultSet.children('arrival').each(function() {
+                    var arrival = $(this);
+                    
+                    var stopID = arrival.attr('locid');
+                    var routeID = arrival.attr('route');
+                    
+                    var key = stopID + ',' + routeID;
+                    var stop = stopObjectsByKey[key];
+                    if (stop) {
+                        stop.arrivals.push(arrival);
+                    }
+                });
+                
+                updateArrivals();
+            }, "xml");
+        }
+        
+        function updateArrivals() {
+            for (var i=0; i<stopObjects.length; i++) {
+                var stop = stopObjects[i];
+                var location = locationObjects[stop.stopID];
+                
+                var container = $('#stop_' + stop.stopID + '_' + stop.routeID);
+                
+                container.removeClass('westbound');
+                container.removeClass('northbound');
+                container.removeClass('eastbound');
+                container.removeClass('southbound');
+                
+                var direction = location.attr('dir').toLowerCase();
+                container.addClass(direction);
+                
+                var details = container.children('.details');
+                details.children('.route').text(stop.routeID);
+                details.children('.description').text(location.attr('desc'));
+                var direction = location.attr('dir');
+                if (direction && direction.length > 0) {
+                    details.children('.direction').text(direction);
+                    details.children('.dir-bubble').text(direction.slice(0, 1));
+                    details.children('.dir-bubble').show();
+                }
+                else {
+                    details.children('.direction').hide();
+                    details.children('.dir-bubble').text('');
+                }
+                details.children('.locid').text(location.attr('locid'));
+                
+                var arrivalsContainer = container.children('.arrivals');
+                arrivalsContainer.children().remove();
+                
+                var arrivals = stop.arrivals;
+                for (var j=0; j<Math.min(arrivals.length, 2); j++) {
+                    var arrival = arrivals[j];
+                    
+                    var estimatedTime = null;
+                    var scheduledTime = null;
+                    
+                    var estimated = arrival.attr('estimated');
+                    if (estimated) {
+                        estimatedTime = new Date(parseInt(estimated));
+                    }
+                    
+                    var scheduled = arrival.attr('scheduled');
+                    if (scheduled) {
+                        scheduledTime = new Date(parseInt(scheduled));
+                    }
+                    
+                    var arrivalContainer = $('<div class="arrival" />');
+                    
+                    var time = null;
+                    if (estimatedTime) {
+                        time = $.timeago(estimatedTime);
+                    }
+                    else {
+                        time = $.timeago(scheduledTime);
+                    }
+                    arrivalContainer.text(time);
+                    
+                    arrivalsContainer.append(arrivalContainer);
+                }
+            }
+        }
+        
+        function startUpdateTimer() {
+            update();
+            setTimeout(startUpdateTimer, 60000);
+        }
+        
+        $(function() {
+            var params = StatusBuilder.getParameters();
+            
+            var contained = params['contained'];
+            if (contained == 'true') {
+                $(document.body).addClass('contained');
+                $(document).bind('touchmove', function(e) {
+                    e.preventDefault();           
+                });
+            }
+            
+            var size = params['size'];
+            if (size == 'small') {
+                $('#trimet').addClass('small');
+            }
+            
+            // Parse stops
+            var stops = params['stops'];
+            var routes = params['routes'];
+            if (stops && routes) {
+                stopIDs = stops.split(',');
+                var routeIDs = routes.split(',');
+                
+                if (stopIDs.length == routeIDs.length) {
+                    for (var i=0; i<stopIDs.length; i++) {
+                        var stopID = stopIDs[i];
+                        var routeID = routeIDs[i];
+                        
+                        var stop = {'stopID': stopID, 'routeID': routeID, 'arrivals': []};
+                        stopObjects.push(stop);
+                        
+                        var key = stopID + ',' + routeID;
+                        stopObjectsByKey[key] = stop;
+                    }
+                }
+            }
+            
+            // Create DOM elements
+            for (var i=0; i<stopObjects.length; i++) {
+                var stop = stopObjects[i];
+                
+                var container = $('<div id="stop_' + stop.stopID + '_' + stop.routeID + '" class="stop" />');
+                
+                var details = $('<div class="details" />');
+                details.append('<header class="route" />');
+                details.append('<div class="dir-bubble" />');
+                details.append('<div class="description" />');
+                details.append('<div class="direction" />');
+                details.append('<div class="locid" />');
+                container.append(details);
+                
+                var arrivals = $('<div class="arrivals" />');
+                container.append(arrivals);
+                
+                $('#stops').append(container);
+            }
+            
+            // Perform TriMet API request
+            if (stopObjects.length > 0) {
+                startUpdateTimer();
+            }
+        });
+    </script>
+</head>
+<body>
+    <div id="trimet">
+        <div id="stops"></div>
+    </div>
+    
+    <!-- GoSquared -->
+    <script type="text/javascript">
+	  var GoSquared = {};
+	  GoSquared.acct = "GSN-526431-G";
+	  (function(w){
+	    function gs(){
+	      w._gstc_lt = +new Date;
+	      var d = document, g = d.createElement("script");
+	      g.type = "text/javascript";
+	      g.src = "//d1l6p2sc9645hc.cloudfront.net/tracker.js";
+	      var s = d.getElementsByTagName("script")[0];
+	      s.parentNode.insertBefore(g, s);
+	    }
+	    w.addEventListener ?
+	      w.addEventListener("load", gs, false) :
+	      w.attachEvent("onload", gs);
+	  })(window);
+	</script>
+</body>
+</html>
